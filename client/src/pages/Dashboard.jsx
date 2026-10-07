@@ -1,132 +1,86 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import api from '../api.js'
+import api from '../api'
 
-const inputStyle = {
-  background: '#17171A',
-  border: '1px solid #26262A',
-  borderRadius: '6px',
-  padding: '0.5rem',
-  color: '#F5F5F3',
-  fontFamily: 'monospace',
-}
-
-const buttonStyle = {
-  background: '#FF6B45',
-  color: '#0B0B0D',
-  border: 'none',
-  borderRadius: '6px',
-  padding: '0.5rem 1rem',
-  fontFamily: 'monospace',
-  fontWeight: 'bold',
-  cursor: 'pointer',
-}
+const inputStyle = { background: '#17171A', border: '1px solid #26262A', borderRadius: '6px', padding: '0.5rem', color: '#F5F5F3', fontFamily: 'monospace' }
+const buttonStyle = { background: '#FF6B45', color: '#0B0B0D', border: 'none', borderRadius: '6px', padding: '0.5rem 1rem', fontFamily: 'monospace', fontWeight: 'bold', cursor: 'pointer' }
+const cellStyle = { padding: '0.5rem 0', borderBottom: '1px solid #1E1E22', textAlign: 'left' }
 
 export default function Dashboard() {
   const [me, setMe] = useState(null)
   const [team, setTeam] = useState([])
   const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteRole, setInviteRole] = useState('member')
   const [inviteMsg, setInviteMsg] = useState(null)
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [inviting, setInviting] = useState(false)
   const navigate = useNavigate()
 
-  const load = useCallback(async () => {
+  const load = async () => {
     try {
-      const [meResponse, teamResponse] = await Promise.all([
-        api.get('/api/me'),
-        api.get('/api/team'),
-      ])
-      setMe(meResponse.data)
-      setTeam(teamResponse.data)
-      setError('')
-    } catch (requestError) {
-      if (requestError.response?.status === 401) {
-        navigate('/login', { replace: true })
-      } else {
-        setError(requestError.response?.data?.error || 'Could not load the dashboard.')
-      }
-    } finally {
-      setLoading(false)
+      const meRes = await api.get('/api/me')
+      setMe(meRes.data)
+      const teamRes = await api.get('/api/team')
+      setTeam(teamRes.data)
+    } catch {
+      navigate('/login')
     }
-  }, [navigate])
+  }
 
-  useEffect(() => {
-    load()
-  }, [load])
+  useEffect(() => { load() }, [])
 
-  async function handleInvite(event) {
-    event.preventDefault()
+  const handleInvite = async (e) => {
+    e.preventDefault()
     setInviteMsg(null)
-    setInviting(true)
-
     try {
-      const response = await api.post('/api/team/invite', { email: inviteEmail, role: 'member' })
-      setInviteMsg({
-        ok: true,
-        text: response.data.inviteUrl
-          ? `Invite email sent. Invite link: ${response.data.inviteUrl}`
-          : 'Invite sent.',
-      })
+      const res = await api.post('/api/team/invite', { email: inviteEmail, role: inviteRole })
+      setInviteMsg({ ok: res.data.emailSent !== false, text: res.data.message })
       setInviteEmail('')
-    } catch (requestError) {
-      setInviteMsg({ ok: false, text: requestError.response?.data?.error || 'Could not send invite.' })
-    } finally {
-      setInviting(false)
+    } catch (err) {
+      setInviteMsg({ ok: false, text: err.response?.data?.error || 'Could not send invite.' })
     }
   }
 
-  async function handleLogout() {
+  const handleLogout = async () => {
     const refreshToken = localStorage.getItem('refreshToken')
-    try {
-      if (refreshToken) {
-        await api.post('/api/auth/logout', { refreshToken })
-      }
-    } finally {
-      localStorage.removeItem('accessToken')
-      localStorage.removeItem('refreshToken')
-      navigate('/login', { replace: true })
-    }
+    await api.post('/api/auth/logout', { refreshToken }).catch(() => {})
+    localStorage.removeItem('accessToken')
+    localStorage.removeItem('refreshToken')
+    navigate('/login')
   }
 
-  if (loading) {
-    return <main style={{ background: '#0B0B0D', minHeight: '100vh', color: '#A6A6AC', fontFamily: 'monospace', padding: '2rem' }}>Loading dashboard…</main>
-  }
+  if (!me) return null
 
-  if (!me) {
-    return <main role="alert" style={{ background: '#0B0B0D', minHeight: '100vh', color: '#FF6B45', fontFamily: 'monospace', padding: '2rem' }}>{error || 'Dashboard unavailable.'}</main>
-  }
-
-  const canInvite = me.role === 'owner' || me.role === 'admin'
+  // /api/me returns { user, company } - user fields live under me.user
+  const user = me.user || {}
+  const company = me.company || {}
+  const canInvite = user.role === 'owner' || user.role === 'admin'
 
   return (
-    <main style={{ background: '#0B0B0D', minHeight: '100vh', color: '#F5F5F3', fontFamily: 'monospace', padding: '2rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
-        <h1 style={{ color: '#FF6B45' }}>{me.company?.name || 'Your company'}</h1>
+    <div style={{ background: '#0B0B0D', minHeight: '100vh', color: '#F5F5F3', fontFamily: 'monospace', padding: '2rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h1 style={{ color: '#FF6B45' }}>{company.name}</h1>
         <button onClick={handleLogout} style={{ background: 'none', border: '1px solid #26262A', borderRadius: '6px', padding: '0.4rem 0.8rem', color: '#A6A6AC', cursor: 'pointer' }}>
           Log out
         </button>
       </div>
-      <p style={{ color: '#A6A6AC' }}>Logged in as {me.name} ({me.role})</p>
-
-      {error && <p role="alert" style={{ color: '#FF6B45' }}>{error}</p>}
+      <p style={{ color: '#A6A6AC' }}>
+        Logged in as {user.name} ({user.role})
+      </p>
 
       <h2 style={{ color: '#7C6FF0', marginTop: '2rem', fontSize: '1rem' }}>Team</h2>
-      <table style={{ width: '100%', marginTop: '0.5rem', fontSize: '0.85rem', textAlign: 'left' }}>
+      <table style={{ width: '100%', marginTop: '0.5rem', fontSize: '0.85rem', borderCollapse: 'collapse' }}>
         <thead>
           <tr>
-            <th>Name</th>
-            <th>Email</th>
-            <th>Role</th>
+            <th style={cellStyle}>Name</th>
+            <th style={cellStyle}>Email</th>
+            <th style={cellStyle}>Role</th>
           </tr>
         </thead>
         <tbody>
           {team.map((member) => (
-            <tr key={member._id} style={{ borderBottom: '1px solid #1E1E22' }}>
-              <td style={{ padding: '0.4rem 0' }}>{member.name}</td>
-              <td style={{ color: '#A6A6AC' }}>{member.email}</td>
-              <td style={{ color: '#4AD3C9' }}>{member.role}</td>
+            <tr key={member._id}>
+              <td style={cellStyle}>{member.name}</td>
+              <td style={{ ...cellStyle, color: '#A6A6AC' }}>{member.email}</td>
+              <td style={{ ...cellStyle, color: '#4AD3C9' }}>{member.role}</td>
             </tr>
           ))}
         </tbody>
@@ -136,16 +90,24 @@ export default function Dashboard() {
         <form onSubmit={handleInvite} style={{ marginTop: '1.5rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
           <input
             type="email"
-            value={inviteEmail}
-            onChange={(event) => setInviteEmail(event.target.value)}
-            placeholder="teammate@email.com"
             required
+            value={inviteEmail}
+            onChange={(e) => setInviteEmail(e.target.value)}
+            placeholder="teammate@email.com"
             style={inputStyle}
           />
-          <button type="submit" disabled={inviting} style={buttonStyle}>{inviting ? 'Sending…' : 'Invite'}</button>
+          <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value)} style={inputStyle}>
+            <option value="member">member</option>
+            <option value="admin">admin</option>
+          </select>
+          <button type="submit" style={buttonStyle}>Invite</button>
         </form>
       )}
-      {inviteMsg && <p role="status" style={{ color: inviteMsg.ok ? '#4AD3C9' : '#FF6B45', fontSize: '0.85rem', marginTop: '0.5rem', overflowWrap: 'anywhere' }}>{inviteMsg.text}</p>}
-    </main>
+      {inviteMsg && (
+        <p style={{ color: inviteMsg.ok ? '#4AD3C9' : '#FF6B45', fontSize: '0.85rem', marginTop: '0.5rem' }}>
+          {inviteMsg.text}
+        </p>
+      )}
+    </div>
   )
 }
