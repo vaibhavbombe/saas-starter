@@ -1,1 +1,3 @@
-dir client\vercel.json
+{
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
