@@ -2,4 +2,3 @@
    dist
    .vite
    .env
-!.env.example
