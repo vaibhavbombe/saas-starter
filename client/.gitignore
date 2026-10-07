@@ -1,5 +1,5 @@
-node_modules/
-dist/
-.env
-.env.*
+   node_modules
+   dist
+   .vite
+   .env
 !.env.example
